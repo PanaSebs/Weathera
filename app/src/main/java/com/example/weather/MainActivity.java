@@ -1,12 +1,15 @@
 package com.example.weather;
 
 import android.os.AsyncTask;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -17,27 +20,39 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-
-    private EditText cityEditText;
-    private TextView weatherTextView;
-    private Button getWeatherButton;
+    EditText cityEditText;
+    Button getWeatherButton;
+    ListView weatherListView;
+    TextView currentWeatherTextView;
+    ArrayAdapter<String> weatherAdapter;
+    List<String> weatherData;
 
     private static final String API_KEY = "384f5168eb6ba9afd904d8d50f7cf718";
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
         cityEditText = findViewById(R.id.cityEditText);
-        weatherTextView = findViewById(R.id.weatherTextView);
         getWeatherButton = findViewById(R.id.getWeatherButton);
+        weatherListView = findViewById(R.id.forecastListView);
+        currentWeatherTextView = findViewById(R.id.currentWeatherTextView);
+
+        weatherData = new ArrayList<>();
+        weatherAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, weatherData);
+        weatherListView.setAdapter(weatherAdapter);
 
         getWeatherButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 String city = cityEditText.getText().toString().trim();
-                String url = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=" + API_KEY;
+                String url = "https://api.openweathermap.org/data/2.5/forecast?q=" + city + "&appid=" + API_KEY;
 
                 FetchWeatherTask task = new FetchWeatherTask();
                 task.execute(url);
@@ -92,22 +107,60 @@ public class MainActivity extends AppCompatActivity {
             if (result != null) {
                 try {
                     JSONObject jsonObject = new JSONObject(result);
-                    JSONArray weatherArray = jsonObject.getJSONArray("weather");
-                    JSONObject weatherObject = weatherArray.getJSONObject(0);
-                    String description = weatherObject.getString("description");
+                    JSONArray forecastArray = jsonObject.getJSONArray("list");
 
-                    JSONObject mainObject = jsonObject.getJSONObject("main");
-                    double temperature = mainObject.getDouble("temp");
+                    weatherData.clear();
+                    DecimalFormat decimalFormat = new DecimalFormat("#.##");
+                    for (int i = 0; i < 16; i++) {
+                        JSONObject forecastObject = forecastArray.getJSONObject(i);
+                        long timestamp = forecastObject.getLong("dt");
+                        JSONObject mainObject = forecastObject.getJSONObject("main");
+                        double temperature = mainObject.getDouble("temp");
+                        int humidity = mainObject.getInt("humidity");
+                        JSONObject windObject = forecastObject.getJSONObject("wind");
+                        double windSpeed = windObject.getDouble("speed");
+                        int rainProbability = 0;
+                        if (forecastObject.has("rain")) {
+                            JSONObject rainObject = forecastObject.getJSONObject("rain");
+                            if (rainObject.has("3h")) {
+                                rainProbability = rainObject.getInt("3h");
+                            }
+                        }
 
-                    String weather = "Clima actual: " + description + "\n";
-                    weather += "Temperatura: " + temperature + "°C";
+                        String weather = "Día " + (i + 1) + ":\n";
+                        weather += "Fecha: " + timestampToDate(timestamp) + "\n";
+                        weather += "Temperatura: " + decimalFormat.format(kelvinToCelsius(temperature)) + "°C\n";
+                        weather += "Humedad: " + humidity + "%\n";
+                        weather += "Velocidad del viento: " + decimalFormat.format(windSpeed) + " m/s\n";
+                        weather += "Probabilidad de lluvia: " + rainProbability + "%";
 
-                    weatherTextView.setText(weather);
+                        weatherData.add(weather);
+                    }
+
+                    weatherAdapter.notifyDataSetChanged();
+
+                    if (!weatherData.isEmpty()) {
+                        String currentWeather = weatherData.get(0); // Obtener el clima del día actual
+                        currentWeatherTextView.setText(currentWeather);
+                    }
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
             }
         }
+
+        private String timestampToDate(long timestamp) {
+            java.util.Date date = new java.util.Date(timestamp * 1000);
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM/yyyy");
+            return sdf.format(date);
+        }
+
+        private double kelvinToCelsius(double temperature) {
+            return temperature - 273.15;
+        }
     }
 }
+
+
+
 
